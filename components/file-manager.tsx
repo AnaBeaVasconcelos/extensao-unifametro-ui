@@ -31,53 +31,102 @@ export default function FileManager() {
 
   // Fetch dados do endpoint no mount do componente
   useEffect(() => {
-    const fetchFinanceiroData = async () => {
-      try {
-        const response = await fetch("http://localhost:8080/api/v1/financeiro/listar", {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        })
-
-        if (!response.ok) {
-          throw new Error(`Erro HTTP: ${response.status}`)
-        }
-
-        const data = await response.json()
-        console.log("[FileManager] Dados carregados do backend:", data)
-
-        // Mapeia para FileData com formatação
-        const mappedData = data.map((item: any) => ({
-          id: item.id.toString(),
-          codBarras: item.codBarras,
-          numDocumento: item.numDoc.toString(),
-          valorDocumento: `R$ ${parseFloat(item.vlrDoc).toFixed(2).replace('.', ',')}`,
-          dataVencimento: new Date(item.dtVen).toLocaleDateString('pt-BR'),
-          dataProcessamento: new Date(item.dtPros).toLocaleDateString('pt-BR'),
-          nomeParceiro: item.nomeParc,
-          status: item.status === 0 ? 'Pendente' : 'Processado',
-          dataBaixa: item.dtBaixa ? new Date(item.dtBaixa).toLocaleDateString('pt-BR') : undefined,
-        }))
-
-        setRegistroFinanceiroFiles(mappedData)
-
-        toast({
-          title: "Dados carregados",
-          description: `${data.length} registros financeiros foram carregados com sucesso.`,
-        })
-      } catch (error) {
-        console.error("[FileManager] Erro ao carregar dados:", error)
-        toast({
-          title: "Erro ao carregar dados",
-          description: "Falha ao buscar registros financeiros do servidor.",
-          variant: "destructive",
-        })
-      }
+    const fetchAllData = async () => {
+      await fetchDdaData()
+      await fetchFinanceiroData()
     }
 
-    fetchFinanceiroData()
+    fetchAllData()
   }, [])
+
+  const fetchDdaData = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/v1/dda/listar", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Erro HTTP: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log("[FileManager] Dados DDA carregados do backend:", data)
+
+      // Mapeia para FileData com formatação
+      const mappedData = data.map((item: any) => ({
+        id: item.id.toString(),
+        codBarras: item.codBarras,
+        numDocumento: item.numDoc.toString(),
+        valorDocumento: `R$ ${parseFloat(item.vlrDoc).toFixed(2).replace('.', ',')}`,
+        dataVencimento: new Date(item.dtVen).toLocaleDateString('pt-BR'),
+        dataProcessamento: new Date(item.dtPros).toLocaleDateString('pt-BR'),
+        nomeParceiro: item.nomeParc,
+        status: item.status === 0 ? 'Pendente' : 'Processado',
+      }))
+
+      setRemessaFiles(mappedData)
+
+      toast({
+        title: "Dados DDA carregados",
+        description: `${data.length} registros DDA foram carregados com sucesso.`,
+      })
+    } catch (error) {
+      console.error("[FileManager] Erro ao carregar dados DDA:", error)
+      toast({
+        title: "Erro ao carregar dados DDA",
+        description: "Falha ao buscar registros DDA do servidor.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const fetchFinanceiroData = async () => {
+    try {
+      const response = await fetch("http://localhost:8080/api/v1/financeiro/listar", {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`Erro HTTP: ${response.status}`)
+      }
+
+      const data = await response.json()
+      console.log("[FileManager] Dados financeiros carregados do backend:", data)
+
+      // Mapeia para FileData com formatação
+      const mappedData = data.map((item: any) => ({
+        id: item.id.toString(),
+        codBarras: item.codBarras,
+        numDocumento: item.numDoc.toString(),
+        valorDocumento: `R$ ${parseFloat(item.vlrDoc).toFixed(2).replace('.', ',')}`,
+        dataVencimento: new Date(item.dtVen).toLocaleDateString('pt-BR'),
+        dataProcessamento: new Date(item.dtPros).toLocaleDateString('pt-BR'),
+        nomeParceiro: item.nomeParc,
+        status: item.status === 0 ? 'Pendente' : 'Processado',
+        dataBaixa: item.dtBaixa ? new Date(item.dtBaixa).toLocaleDateString('pt-BR') : undefined,
+      }))
+
+      setRegistroFinanceiroFiles(mappedData)
+
+      toast({
+        title: "Dados financeiros carregados",
+        description: `${data.length} registros financeiros foram carregados com sucesso.`,
+      })
+    } catch (error) {
+      console.error("[FileManager] Erro ao carregar dados financeiros:", error)
+      toast({
+        title: "Erro ao carregar dados financeiros",
+        description: "Falha ao buscar registros financeiros do servidor.",
+        variant: "destructive",
+      })
+    }
+  }
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -143,42 +192,60 @@ export default function FileManager() {
     setIsProcessing(true)
 
     try {
-      // Simulate backend API call
       const formData = new FormData()
       formData.append("file", selectedFile)
-      formData.append("type", fileType)
 
-      // Simulated API call - replace with actual endpoint
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      const newFile: FileData = {
-        id: Math.random().toString(36).substr(2, 9),
-        codBarras: "123456789",
-        numDocumento: "987654321",
-        valorDocumento: "R$ 1.000,00",
-        dataVencimento: "2024-12-31",
-        dataProcessamento: new Date().toLocaleDateString(),
-        nomeParceiro: "Parceiro Exemplo",
-        dataBaixa: new Date().toLocaleDateString(),
-        status: "Processado",
-      }
-
+      let response;
       if (fileType === "return") {
-        setRemessaFiles((prev) => [...prev, newFile])
-      } else {
-        setRegistroFinanceiroFiles((prev) => [...prev, newFile])
-      }
+        // Real API call for DDA remessa
+        response = await fetch("http://localhost:8080/api/v1/dda/receber-dados-edi", {
+          method: "POST",
+          body: formData,
+          headers: {
+            'Accept': 'application/json'
+          }
+        })
 
-      toast({
-        title: "Arquivo processado com sucesso",
-        description: `${selectedFile.name} foi adicionado à fila de ${fileType} arquivos`,
-      })
+        if (response.ok && response.status === 201) {
+          toast({
+            title: "Arquivo processado com sucesso",
+            description: `${selectedFile.name} foi adicionado à fila de remessa DDA`,
+          })
+
+          // Refresh the DDA table after successful creation
+          await fetchDdaData()
+        } else {
+          throw new Error(`Erro HTTP: ${response.status}`)
+        }
+      } else {
+        // Real API call for financeiro - ajuste o endpoint conforme necessário
+        response = await fetch("http://localhost:8080/api/v1/financeiro/processar-arquivo", {
+          method: "POST",
+          body: formData,
+          headers: {
+            'Accept': 'application/json'
+          }
+        })
+
+        if (response.ok && response.status === 201) {
+          toast({
+            title: "Arquivo processado com sucesso",
+            description: `${selectedFile.name} foi adicionado à fila de retorno arquivos`,
+          })
+
+          // Refresh the financeiro table after successful creation
+          await fetchFinanceiroData()
+        } else {
+          throw new Error(`Erro HTTP: ${response.status}`)
+        }
+      }
 
       setSelectedFile(null)
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
     } catch (error) {
+      console.error("[FileManager] Erro no processamento:", error)
       toast({
         title: "Falha no processamento",
         description: "Ocorreu um erro ao processar seu arquivo",
