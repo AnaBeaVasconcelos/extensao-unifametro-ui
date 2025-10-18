@@ -61,10 +61,10 @@ export default function FileManager() {
         codBarras: item.codBarras,
         numDocumento: item.numDoc.toString(),
         valorDocumento: `R$ ${parseFloat(item.vlrDoc).toFixed(2).replace('.', ',')}`,
-        dataVencimento: new Date(item.dtVen).toLocaleDateString('pt-BR'),
-        dataProcessamento: new Date(item.dtPros).toLocaleDateString('pt-BR'),
+        dataVencimento: item.dtVen ? new Date(item.dtVen).toLocaleDateString('pt-BR') : 'N/A',
+        dataProcessamento: item.dtPros ? new Date(item.dtPros).toLocaleDateString('pt-BR') : 'N/A',
         nomeParceiro: item.nomeParc,
-        status: item.status === 0 ? 'Pendente' : 'Processado',
+        status: item.status
       }))
 
       setRemessaFiles(mappedData)
@@ -105,11 +105,11 @@ export default function FileManager() {
         codBarras: item.codBarras,
         numDocumento: item.numDoc.toString(),
         valorDocumento: `R$ ${parseFloat(item.vlrDoc).toFixed(2).replace('.', ',')}`,
-        dataVencimento: new Date(item.dtVen).toLocaleDateString('pt-BR'),
-        dataProcessamento: new Date(item.dtPros).toLocaleDateString('pt-BR'),
+        dataVencimento: item.dtVen ? new Date(item.dtVen).toLocaleDateString('pt-BR') : 'N/A',
+        dataProcessamento: item.dtPros ? new Date(item.dtPros).toLocaleDateString('pt-BR') : 'N/A',
         nomeParceiro: item.nomeParc,
-        status: item.status === 0 ? 'Pendente' : 'Processado',
-        dataBaixa: item.dtBaixa ? new Date(item.dtBaixa).toLocaleDateString('pt-BR') : undefined,
+        status: item.status,
+        dataBaixa: item.dtBaixa ? new Date(item.dtBaixa).toLocaleDateString('pt-BR') : 'N/A',
       }))
 
       setRegistroFinanceiroFiles(mappedData)
@@ -132,10 +132,10 @@ export default function FileManager() {
     const file = event.target.files?.[0]
     if (file) {
       // Validate file type
-      if (!file.name.toLowerCase().endsWith(".txt")) {
+      if (!file.name.toLowerCase().endsWith(".ret")) {
         toast({
           title: "Tipo de arquivo inválido",
-          description: "Somente arquivos .txt são permitidos.",
+          description: "Somente arquivos .ret são permitidos.",
           variant: "destructive",
         })
         // Clear the input
@@ -162,10 +162,10 @@ export default function FileManager() {
     const file = event.dataTransfer.files?.[0]
     if (file) {
       // Validate file type
-      if (!file.name.toLowerCase().endsWith(".txt")) {
+      if (!file.name.toLowerCase().endsWith(".ret")) {
         toast({
           title: "Tipo de arquivo inválido",
-          description: "Somente arquivos .txt são permitidos.",
+          description: "Somente arquivos .ret são permitidos.",
           variant: "destructive",
         })
         return
@@ -196,59 +196,53 @@ export default function FileManager() {
       formData.append("file", selectedFile)
 
       let response;
+      let endpoint: string;
+      let successMessage: string;
+      let refreshFn: () => Promise<void>;
+
       if (fileType === "return") {
-        // Real API call for DDA remessa
-        response = await fetch("http://localhost:8080/api/v1/dda/receber-dados-edi", {
-          method: "POST",
-          body: formData,
-          headers: {
-            'Accept': 'application/json'
-          }
-        })
-
-        if (response.ok && response.status === 201) {
-          toast({
-            title: "Arquivo processado com sucesso",
-            description: `${selectedFile.name} foi adicionado à fila de remessa DDA`,
-          })
-
-          // Refresh the DDA table after successful creation
-          await fetchDdaData()
-        } else {
-          throw new Error(`Erro HTTP: ${response.status}`)
-        }
+        // Remessa DDA
+        endpoint = "http://localhost:8080/api/v1/dda/receber-dados-edi";
+        successMessage = `${selectedFile.name} foi adicionado à fila de remessa DDA`;
+        refreshFn = fetchDdaData;
       } else {
-        // Real API call for financeiro - ajuste o endpoint conforme necessário
-        response = await fetch("http://localhost:8080/api/v1/financeiro/processar-arquivo", {
-          method: "POST",
-          body: formData,
-          headers: {
-            'Accept': 'application/json'
-          }
-        })
+        // Retorno Financeiro
+        endpoint = "http://localhost:8080/api/v1/financeiro/leitura-dados-edi";
+        successMessage = `${selectedFile.name} foi processado como retorno financeiro`;
+        refreshFn = fetchFinanceiroData;
+      }
 
-        if (response.ok && response.status === 201) {
-          toast({
-            title: "Arquivo processado com sucesso",
-            description: `${selectedFile.name} foi adicionado à fila de retorno arquivos`,
-          })
-
-          // Refresh the financeiro table after successful creation
-          await fetchFinanceiroData()
-        } else {
-          throw new Error(`Erro HTTP: ${response.status}`)
+      response = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+        headers: {
+          'Accept': 'application/json'
         }
+      });
+
+      if (response.ok) {
+        toast({
+          title: "Arquivo processado com sucesso",
+          description: successMessage,
+        });
+
+        // Refresh the appropriate table after successful creation
+        await refreshFn();
+      } else {
+        const errorText = await response.text();
+        console.error("Erro na resposta:", errorText);
+        throw new Error(`Erro HTTP: ${response.status} - ${errorText}`);
       }
 
       setSelectedFile(null)
       if (fileInputRef.current) {
         fileInputRef.current.value = ""
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("[FileManager] Erro no processamento:", error)
       toast({
         title: "Falha no processamento",
-        description: "Ocorreu um erro ao processar seu arquivo",
+        description: error.message || "Ocorreu um erro ao processar seu arquivo. Verifique se o servidor está rodando em http://localhost:8080.",
         variant: "destructive",
       })
     } finally {
@@ -377,7 +371,7 @@ export default function FileManager() {
         <h1 className="mb-6 font-sans text-2xl font-bold uppercase tracking-tight text-primary">Passo 1: Upload de Arquivo</h1>
 
         <p className="mb-6 text-base leading-relaxed text-foreground">
-          Faça o upload do seu arquivo para processar dados de retorno ou remessa. Somente arquivos .txt são permitidos.
+          Faça o upload do seu arquivo para processar dados de retorno ou remessa. Somente arquivos .ret são permitidos.
         </p>
 
         <div className="mb-6 flex flex-wrap items-center gap-4">
@@ -387,7 +381,7 @@ export default function FileManager() {
               type="file"
               onChange={handleFileSelect}
               className="absolute inset-0 cursor-pointer opacity-0"
-              accept=".txt"
+              accept=".ret"
             />
             <Button
               variant="outline"
